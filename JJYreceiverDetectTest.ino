@@ -7,8 +7,10 @@ volatile boolean flag = false;
 int8_t d_year, d_week, d_month, d_day, d_hour, d_min;
 const byte month_day[]={0,31,28,31,30,31,30,31,31,30,31,30,31};
 
-uint8_t hh, mm, ss, MM, DD;
+uint8_t ss;
 bool  markerCheckOk;
+bool  firstLoop = true;
+int8_t decodeOkCount = 0;
 
 
 void IRAM_ATTR jjysignaldetect() {
@@ -94,7 +96,7 @@ int8_t get_code(void) {
       ss++;
       ss %= 60;
       Serial.printf("%d/%02d/%02d ", d_year+2000, d_month, d_day);
-      Serial.printf("%02d:%02d:%02d\n", hh, mm, ss);
+      Serial.printf("%02d:%02d:%02d\n", d_hour, d_min, ss);
       
   return(ret_code);
 }
@@ -199,7 +201,13 @@ void decode() {
   }
   // 通算日数（後半）のデコード おわり
 
-
+  //通算日数から月、日の算出
+  d_month = 0;
+  do{
+    dayCount -= month_day[d_month];//dayCountから経過月の日数を減算
+    d_month++;
+  } while( dayCount > month_day[d_month]);//最後の経過月に到達するまで
+  d_day = dayCount;
   
 
   // 年のデコードはじめ  ***********************
@@ -258,54 +266,90 @@ void decode() {
   }
 
 
-  //通算日数から月、日の算出
-  d_month = 0;
-  do{
-    dayCount -= month_day[d_month];//dayCountから経過月の日数を減算
-    d_month++;
-  } while( dayCount > month_day[d_month]);//最後の経過月に到達するまで
-  d_day = dayCount;
+
 }
 
 
 void loop() {
   int8_t m, p;
   int8_t sec, min = -1, hur;
+  bool decodeOk;
+  
+  static uint8_t hh, mm, MM, DD, YY;
+  static uint8_t hhp, mmp, MMp, DDp, YYp;
 
   //2回連続マーカーの検出
   do {
+    Serial.println("Looking for Marker");
     p = m;
     m = get_code();
   }while(p * m != 4);// マーカー(2)が２回続くまで繰り返す。
-  Serial.println("2markers detected!!\n");
+  Serial.println("2-markers detected!!\n");
   ss = 0;
   markerCheckOk = true;
 
-  while(markerCheckOk){ //ポジションマーカーをすべて正しく検出できている間は繰り返し。
-                        //一つでも検出できていなかったら最初から始めなおす。
-    /*秒数カウントクロック
-    sec = (sec > 59)? 0 : sec;
-    min = (sec == 0)? min+1 : min;
-    min = (min > 59)? 0 : min;
-    hur = (min == 0)? hur+1 : hur;
-    hur = (hur > 23)? 0 : hur;
-    //Serial.printf("%02d:%02d:%02d\n", hur, min, sec);
-    sec++;
-    */
 
-    //デコード実行
+  do {//ポジションマーカーをすべて正しく検出できている間は繰り返すループ
+      //もし、一つでも検出できていなかったらマーカ検出からやり直す。
+   
+
+    //デコード実行（60秒間のスキャンとデコード）
     decode();
-    hh = d_hour;
-    mm = d_min + 1;
-    DD = d_day;
-    MM = d_month;
-  
-  }
-  delay(1);
-}
-  
 
+Serial.printf("Previous decode: %d/%02d/%02d %02d:%02d\n",YYp,MMp,DDp,hhp,mmp);
+Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d_hour,d_min);
 
 
 
     
+    //デコード結果のチェック（前回デコード結果との比較）
+    if( (d_year == YYp) && (d_month == MMp) && (d_day == DDp) && (d_hour == hhp) ){
+        Serial.println("Successive decode OK.\n");
+        //decodeOkCount++;
+        decodeOkCount = (decodeOkCount < 2)? decodeOkCount + 1 : 2;// チェックOKのカウント数の上限を２にする
+    }else {
+        Serial.println("Successive decode Failed.\n");
+        decodeOkCount = (decodeOkCount > 0)? decodeOkCount - 1 : 0;
+    }
+
+    decodeOk = (decodeOkCount > 1)? true : false;
+
+    YYp = d_year;
+    MMp = d_month;
+    DDp = d_day;
+    hhp = d_hour;
+    mmp = d_min;
+
+     
+    if (markerCheckOk && decodeOk) {//デコードOKの場合、デコード結果を反映
+      mm = d_min + 1;
+      hh = d_hour;
+      DD = d_day;
+      MM = d_month;
+      YY = d_year;
+    } else {            //デコードNGの場合、前回時刻をインクリメント
+      mm++;
+      if( mm = 60 ){
+        mm = 0;
+        hh++;
+      }
+      if( hh = 24 ){
+        hh = 0;
+        DD++;
+      }
+      if( DD > month_day[MM] ){
+        DD = 1;
+        MM++;
+      }
+      if( MM = 13 ){
+        MM = 1;
+        YY++;
+      }
+    }
+
+    Serial.printf("******* %d/%02d/%02d ", 2000 + YY, MM, DD);
+    Serial.printf("%02d:%02d(%d)\n", hh, mm, decodeOkCount);
+  
+  }while(markerCheckOk);
+  delay(1);
+}
