@@ -1,5 +1,9 @@
+#include <Wire.h>
+#include <stdio.h>
+
 #define PIN 14
 #define LED 25
+#define LCDaddr 0x3e    //  = 0x7C >> 1
 
 volatile boolean flag = false;
 
@@ -10,7 +14,7 @@ const byte month_day[]={0,31,28,31,30,31,30,31,31,30,31,30,31};
 uint8_t ss;
 bool  markerCheckOk;
 bool  firstLoop = true;
-int8_t decodeOkCount = 0;
+char buff[10];
 
 
 void IRAM_ATTR jjysignaldetect() {
@@ -19,6 +23,71 @@ void IRAM_ATTR jjysignaldetect() {
   }
 }
 
+//********* LCD関係
+void LCD_cmd(byte cmd) {
+  //  Write command = {LCDaddr, 0x00, cmd}
+  Wire.beginTransmission(LCDaddr);
+  Wire.write(0x00);
+  Wire.write(cmd);
+  Wire.endTransmission();
+  delay(2);
+}
+
+void LCD_data(byte dat) {
+  //  Write data = {LCDaddr, 0x40, dat}
+  Wire.beginTransmission(LCDaddr);
+  Wire.write(0x40);
+  Wire.write(dat);
+  Wire.endTransmission();
+  delay(1);
+}
+
+void LCD_init() {
+  delay(40);
+  //  Function set 0x39=B00111001 (extension-mode)
+  LCD_cmd(0x39);//  Internal OSC 0x14=B00010100 (BS=0, FR=4)
+  LCD_cmd(0x14);//  Contrast set 0x72=B01110010 (level=2)
+  LCD_cmd(0x72);//  Power etc    0x56=B01010110 (Boost, const=B10)
+  LCD_cmd(0x56);//  Follower     0x6c=B01101100 (on, amp=B100)
+  LCD_cmd(0x6c);//  Function set 0x38=B00111001 (normal-mode)
+  LCD_cmd(0x38);//  clear display
+  LCD_cmd(0x01);//  display on   0x0c=B00001100 (On, no-cursor, no-blink)
+  LCD_cmd(0x0c);
+}
+
+void LCDclear() {
+  //  画面クリア
+  LCD_cmd(0x01);
+}
+
+void LCD_cursor(int x, int y) {
+  //  カーソルを x 行 y 字目に移動
+  if (y == 0) {
+    LCD_cmd(0x80 + x);
+  }
+  else {
+    LCD_cmd(0xc0 + x);
+  }
+}
+
+void putch(byte ch){
+  LCD_data(ch);
+}
+
+void LCD_print(char *str) {
+  //  カーソル位置に文字列を表示（表示後にカーソルは移動）
+  for (int i = 0; i < strlen(str); i++) {
+    LCD_data(str[i]);
+  }
+}
+
+
+
+
+
+
+
+
 
 void setup() {
   pinMode(PIN, INPUT);
@@ -26,6 +95,11 @@ void setup() {
   
   Serial.begin(115200);
   delay(200);
+
+  Wire.begin();
+  LCD_init();
+  LCD_cursor(0,0);
+  LCD_print("LCD init");
 
 
   attachInterrupt(PIN, jjysignaldetect, RISING);
@@ -97,6 +171,10 @@ int8_t get_code(void) {
       ss %= 60;
       Serial.printf("%d/%02d/%02d ", d_year+2000, d_month, d_day);
       Serial.printf("%02d:%02d:%02d\n", d_hour, d_min, ss);
+
+      LCD_cursor(6,1);
+      sprintf(buff, "%02d", ss);
+      LCD_print(buff);
       
   return(ret_code);
 }
@@ -274,10 +352,11 @@ void loop() {
   int8_t m, p;
   int8_t sec, min = -1, hur;
   bool decodeOk;
-  
+  static int8_t decodeOkCount = 0;
+
   static uint8_t hh, mm, MM, DD, YY;
   static uint8_t hhp, mmp, MMp, DDp, YYp;
-
+  
   //2回連続マーカーの検出
   do {
     Serial.println("Looking for Marker");
@@ -329,11 +408,11 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
       YY = d_year;
     } else {            //デコードNGの場合、前回時刻をインクリメント
       mm++;
-      if( mm = 60 ){
+      if( mm == 60 ){
         mm = 0;
         hh++;
       }
-      if( hh = 24 ){
+      if( hh == 24 ){
         hh = 0;
         DD++;
       }
@@ -341,7 +420,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
         DD = 1;
         MM++;
       }
-      if( MM = 13 ){
+      if( MM == 13 ){
         MM = 1;
         YY++;
       }
@@ -349,7 +428,15 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
 
     Serial.printf("******* %d/%02d/%02d ", 2000 + YY, MM, DD);
     Serial.printf("%02d:%02d(%d)\n", hh, mm, decodeOkCount);
-  
+
+    LCD_cursor(0,0);
+    sprintf(buff, "%02d/%02d/%02d", YY, MM, DD);
+    LCD_print(buff);
+    
+    LCD_cursor(0,1);
+    sprintf(buff, "%02d:%02d:", hh, mm);
+    LCD_print(buff);
+    
   }while(markerCheckOk);
   delay(1);
 }
