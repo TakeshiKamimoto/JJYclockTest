@@ -417,7 +417,7 @@ void loop() {
   static uint8_t hhp, mmp, MMp, DDp, YYp;
 
   
-  //2回連続マーカーの検出
+  //2回連続マーカーの検出ループ
   do {
     Serial.println("Looking for Marker");
     p = m;
@@ -427,27 +427,26 @@ void loop() {
       InternalClockCount();
       LCD_update();
     }
-
-    
   }while(p * m != 4);// マーカー(2)が２回続くまで繰り返す。
+
   
   Serial.println("2-markers detected!!\n");
   ss = 0;
+  InternalClockCount();
+  LCD_update();
   markerCheckOk = true;
 
 
-  do {//ポジションマーカーをすべて正しく検出できている間は繰り返すループ
-      //もし、一つでも検出できていなかったらマーカ検出からやり直す。
-   
+
+  do {//デコードを実行するループ
+      //ポジションマーカーをすべて正しく検出できている間は繰り返す。
+      //もし、一つでも検出できていなかったらループを止めてマーカ検出からやり直す。
 
     //デコード実行（60秒間のスキャンとデコード）
     decode();
 
 Serial.printf("Previous decode: %d/%02d/%02d %02d:%02d\n",YYp,MMp,DDp,hhp,mmp);
 Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d_hour,d_min);
-
-
-
     
     //デコード結果のチェック（前回デコード結果との比較）
     if( (d_year == YYp) && (d_month == MMp) && (d_day == DDp) && (d_hour == hhp) ){
@@ -475,7 +474,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
       DD = d_day;
       MM = d_month;
       YY = d_year;
-    } else {            //デコードNGの場合、内部時計をカウント
+    } else { //デコードNGの場合、内部時計をカウントアップ
       InternalClockCount();
     }
 
