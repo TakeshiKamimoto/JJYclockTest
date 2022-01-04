@@ -11,19 +11,22 @@ volatile boolean flag = false;
 int8_t d_year, d_week, d_month, d_day, d_hour, d_min;
 const byte month_day[]={0,31,28,31,30,31,30,31,31,30,31,30,31};
 
+uint8_t hh, mm, MM, DD, YY;
+
+
 uint8_t ss;
-bool  markerCheckOk;
+bool  markerCheckOk, parityCheckOk;
 bool  firstLoop = true;
 char buff[10];
 
 
-void IRAM_ATTR jjysignaldetect() {
+void IRAM_ATTR jjysignaldetect() {// GPIO割り込みにより呼ばれるルーチン
   if (!flag) {
-    flag = true;//割り込みが発生したことをメインループに知らせるフラグ
+    flag = true;//JJYパルスが発生したことをメインループに知らせるフラグ
   }
 }
 
-//********* LCD関係
+//********* LCD関係 ********* 
 void LCD_cmd(byte cmd) {
   //  Write command = {LCDaddr, 0x00, cmd}
   Wire.beginTransmission(LCDaddr);
@@ -101,7 +104,7 @@ void setup() {
   LCD_cursor(0,0);
   LCD_print("LCD init");
 
-
+  // JJYパルスをGPIO割り込みで検出するための設定
   attachInterrupt(PIN, jjysignaldetect, RISING);
 }
 
@@ -113,7 +116,7 @@ int8_t get_code(void) {
   bool scan[4];
 
     
-  while (!flag) {//ビットスキャン開始待ち
+  while (!flag) {//JJYパルス検出待ち
   }
 
     // スキャン開始
@@ -186,6 +189,7 @@ void decode() {
   int8_t  bitcode[10];
   uint8_t n;
   bool  codeOk, longDayOk;
+  uint8_t h_parity, m_parity, PA1, PA2;
 
   //*** 分のデコード はじめ ***********************
   for (int8_t i = 0; i < 8; i++) {
@@ -197,6 +201,8 @@ void decode() {
   if(codeOk) {
     d_min = bitcode[0]*40 + bitcode[1]*20 + bitcode[2]*10
           + bitcode[4]*8  + bitcode[5]*4  + bitcode[6]*2  + bitcode[7];
+
+    m_parity = (bitcode[0]+bitcode[1]+bitcode[2]+bitcode[4]+bitcode[5]+bitcode[6]+bitcode[7]) % 2;
   }
 
   if (get_code() == 2){
@@ -220,6 +226,8 @@ void decode() {
   if(codeOk) {
     d_hour  = bitcode[2]*20 + bitcode[3]*10
             + bitcode[5]*8  + bitcode[6]*4  + bitcode[7]*2  + bitcode[8];
+
+    h_parity = (bitcode[2]+bitcode[3]+bitcode[5]+bitcode[6]+bitcode[7]+bitcode[8]) % 2;
   }
 
   if (get_code() == 2){
@@ -268,6 +276,9 @@ void decode() {
   if(codeOk && longDayOk) {
     dayCount = bitcode[0]*8 + bitcode[1]*4 + bitcode[2]*2 + bitcode[3];
     dayCount += longDayCount;
+
+    PA1 = bitcode[6];// 時パリティビット
+    PA2 = bitcode[7];// 分パリティビット
   }
 
   if (get_code() == 2){
@@ -332,6 +343,7 @@ void decode() {
     markerCheckOk = false;
   }
   // 曜日のデコードおわり
+  
   Serial.println("End of time code decording sequence.");
 
 
@@ -343,26 +355,82 @@ void decode() {
     Serial.println("Failed to read Position Maker M");
   }
 
+  if (PA1 == h_parity){
+    Serial.println("Hour parity check OK.");
+    parityCheckOk = true;
+  }else {
+    Serial.println("Hour parity check NG!!!!");
+    parityCheckOk = false;
+  }
+
+  if (PA2 == m_parity){
+    Serial.println("Minute parity check OK.");
+      if (!parityCheckOk){
+        parityCheckOk = false;
+      }else {
+        parityCheckOk = true;
+      }
+  }else {
+    Serial.println("Minute parity check NG!!!!");
+    parityCheckOk = false;
+  }
 
 
 }
 
+void LCD_update() {
+    // LCDに年/月/日と時:分の表示
+    LCD_cursor(0,0);
+    sprintf(buff, "%02d/%02d/%02d", YY, MM, DD);
+    LCD_print(buff);
+    
+    LCD_cursor(0,1);
+    sprintf(buff, "%02d:%02d:", hh, mm);
+    LCD_print(buff);
+}
+
+void InternalClockCount(){
+      mm++;
+      if( mm == 60 ){
+        mm = 0;
+        hh++;
+      }
+      if( hh == 24 ){
+        hh = 0;
+        DD++;
+      }
+      if( DD > month_day[MM] ){
+        DD = 1;
+        MM++;
+      }
+      if( MM == 13 ){
+        MM = 1;
+        YY++;
+      }
+}
 
 void loop() {
   int8_t m, p;
   int8_t sec, min = -1, hur;
   bool decodeOk;
   static int8_t decodeOkCount = 0;
-
-  static uint8_t hh, mm, MM, DD, YY;
   static uint8_t hhp, mmp, MMp, DDp, YYp;
+
   
   //2回連続マーカーの検出
   do {
     Serial.println("Looking for Marker");
     p = m;
     m = get_code();
+
+    if( ss == 0 ){
+      InternalClockCount();
+      LCD_update();
+    }
+
+    
   }while(p * m != 4);// マーカー(2)が２回続くまで繰り返す。
+  
   Serial.println("2-markers detected!!\n");
   ss = 0;
   markerCheckOk = true;
@@ -393,6 +461,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
 
     decodeOk = (decodeOkCount > 1)? true : false;
 
+    // 今回デコード結果を保存
     YYp = d_year;
     MMp = d_month;
     DDp = d_day;
@@ -400,42 +469,20 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
     mmp = d_min;
 
      
-    if (markerCheckOk && decodeOk) {//デコードOKの場合、デコード結果を反映
+    if (markerCheckOk && decodeOk && parityCheckOk) {//デコードOK, パリティチェックOKの場合、デコード結果を反映
       mm = d_min + 1;
       hh = d_hour;
       DD = d_day;
       MM = d_month;
       YY = d_year;
-    } else {            //デコードNGの場合、前回時刻をインクリメント
-      mm++;
-      if( mm == 60 ){
-        mm = 0;
-        hh++;
-      }
-      if( hh == 24 ){
-        hh = 0;
-        DD++;
-      }
-      if( DD > month_day[MM] ){
-        DD = 1;
-        MM++;
-      }
-      if( MM == 13 ){
-        MM = 1;
-        YY++;
-      }
+    } else {            //デコードNGの場合、内部時計をカウント
+      InternalClockCount();
     }
 
     Serial.printf("******* %d/%02d/%02d ", 2000 + YY, MM, DD);
     Serial.printf("%02d:%02d(%d)\n", hh, mm, decodeOkCount);
 
-    LCD_cursor(0,0);
-    sprintf(buff, "%02d/%02d/%02d", YY, MM, DD);
-    LCD_print(buff);
-    
-    LCD_cursor(0,1);
-    sprintf(buff, "%02d:%02d:", hh, mm);
-    LCD_print(buff);
+    LCD_update();
     
   }while(markerCheckOk);
   delay(1);
