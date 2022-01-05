@@ -433,7 +433,6 @@ void loop() {
   Serial.println("2-markers detected!!\n");
   ss = 0;
   InternalClockCount();
-  LCD_update();
   markerCheckOk = true;
 
 
@@ -442,6 +441,7 @@ void loop() {
       //ポジションマーカーをすべて正しく検出できている間は繰り返す。
       //もし、一つでも検出できていなかったらループを止めてマーカ検出からやり直す。
 
+    LCD_update();
     //デコード実行（60秒間のスキャンとデコード）
     decode();
 
@@ -481,7 +481,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
     Serial.printf("******* %d/%02d/%02d ", 2000 + YY, MM, DD);
     Serial.printf("%02d:%02d(%d)\n", hh, mm, decodeOkCount);
 
-    LCD_update();
+    
     
   }while(markerCheckOk);
   delay(1);
