@@ -17,7 +17,7 @@ bool  firstLoop = true;
 char  buff[10];
 
 uint8_t markerOkCount;
-bool  P1markerOk;
+bool  P1markerOk, P2markerOk;
 
 void IRAM_ATTR jjysignaldetect() {// GPIO割り込みにより呼ばれるルーチン
   if (!flag) {
@@ -202,7 +202,6 @@ void decode() {
 
   if (get_code() == 2){
     Serial.println("Position Marker P1 detected.");
-    markerOkCount++;
     P1markerOk = true;
   }
   else {
@@ -228,11 +227,11 @@ void decode() {
 
   if (get_code() == 2){
     Serial.println("Position Marker P2 detected.");
-    markerOkCount++;
+    P2markerOk = true;
   }
   else {
     Serial.println("Failed to read Position Maker P2");
-    markerCheckOk = false;
+    P2markerOk = false;
   }
   //*** 時のデコード おわり
 
@@ -342,7 +341,7 @@ void decode() {
   
   Serial.println("End of time code decording sequence.");
 
-  markerCheckOk = (markerOkCount > 3)? true : false;//ポジションマーカー検出が4回以上できていればOKとする。
+  markerCheckOk = (markerOkCount > 2)? true : false;//ポジションマーカー検出が3回以上できていればOKとする。
 
   if (get_code() == 2){
     Serial.println("Marker M detected.");
@@ -527,7 +526,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
         DD = d_day;
     }
 
-    if( hhdecodeOk && HparityCheckOk && (mm != 0) ){//時デコード結果の反映。毎正時のときは反映しない
+    if( hhdecodeOk && HparityCheckOk && P2markerOk && (mm != 0) ){//時デコード結果の反映。毎正時のときは反映しない
         hh = d_hour;
     }
     
@@ -538,5 +537,6 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
 
     
   }while(markerCheckOk);
+  LCD_update();
   delay(1);
 }
