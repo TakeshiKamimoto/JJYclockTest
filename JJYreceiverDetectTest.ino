@@ -72,10 +72,6 @@ void LCD_cursor(int x, int y) {
   }
 }
 
-void putch(byte ch){
-  LCD_data(ch);
-}
-
 void LCD_print(char *str) {
   //  カーソル位置に文字列を表示（表示後にカーソルは移動）
   for (int i = 0; i < strlen(str); i++) {
@@ -193,14 +189,14 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk) {
+  if( codeOk ) {
     d_min = bitcode[0]*40 + bitcode[1]*20 + bitcode[2]*10
           + bitcode[4]*8  + bitcode[5]*4  + bitcode[6]*2  + bitcode[7];
 
     m_parity = (bitcode[0]+bitcode[1]+bitcode[2]+bitcode[4]+bitcode[5]+bitcode[6]+bitcode[7]) % 2;
   }
 
-  if (get_code() == 2){
+  if ( get_code() == 2 ){
     Serial.println("Position Marker P1 detected.");
     P1markerOk = true;
     markerOkCount++;
@@ -219,14 +215,14 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk) {
+  if( codeOk ) {
     d_hour  = bitcode[2]*20 + bitcode[3]*10
             + bitcode[5]*8  + bitcode[6]*4  + bitcode[7]*2  + bitcode[8];
 
     h_parity = (bitcode[2]+bitcode[3]+bitcode[5]+bitcode[6]+bitcode[7]+bitcode[8]) % 2;
   }
 
-  if (get_code() == 2){
+  if( get_code() == 2 ){
     Serial.println("Position Marker P2 detected.");
     P2markerOk = true;
     markerOkCount++;
@@ -245,13 +241,13 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk) {
+  if( codeOk ) {
     longDayCount  = bitcode[2]*200 + bitcode[3]*100
                   + bitcode[5]*80  + bitcode[6]*40  + bitcode[7]*20  + bitcode[8]*10;
     longDayOk = true;
   }
 
-  if (get_code() == 2){
+  if ( get_code() == 2 ){
     Serial.println("Position Marker P3 detected.");
     markerOkCount++;
   }
@@ -268,7 +264,7 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk && longDayOk) {
+  if( codeOk && longDayOk ) {
     dayCount = bitcode[0]*8 + bitcode[1]*4 + bitcode[2]*2 + bitcode[3];
     dayCount += longDayCount;
 
@@ -276,7 +272,7 @@ void decode() {
     PA2 = bitcode[7];// 分パリティビット
   }
 
-  if (get_code() == 2){
+  if( get_code() == 2 ){
     Serial.println("Position Marker P4 detected.");
     markerOkCount++;
   }
@@ -301,13 +297,13 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk) {
+  if( codeOk ) {
     d_year  = bitcode[1]*80 + bitcode[2]*40 + bitcode[3]*20
             + bitcode[4]*10 + bitcode[5]*8  + bitcode[6]*4
             + bitcode[7]*2  + bitcode[8];
   }
 
-  if (get_code() == 2){
+  if( get_code() == 2 ){
     Serial.println("Position Marker P5 detected.");
   }
   else {
@@ -323,11 +319,11 @@ void decode() {
     bitcode[i] = n;
   }
 
-  if(codeOk) {
+  if( codeOk ) {
     d_week  = bitcode[0]*4 + bitcode[1]*2 + bitcode[2];
   }
   
-  if (get_code() == 2){
+  if( get_code() == 2 ){
     Serial.println("Position Marker P0 detected.");
   }
   else {
@@ -339,14 +335,14 @@ void decode() {
 
   markerCheckOk = (markerOkCount > 1)? true : false;//ポジションマーカー検出が2回以上できていればOKとする。
 
-  if (get_code() == 2){
+  if ( get_code() == 2 ){
     Serial.println("Marker M detected.");
   }
   else {
     Serial.println("Failed to read Position Maker M");
   }
 
-  if (PA1 == h_parity){
+  if( PA1 == h_parity ){
     Serial.println("Hour parity check OK.");
     HparityCheckOk = true;
   }else {
@@ -354,7 +350,7 @@ void decode() {
     HparityCheckOk = false;
   }
 
-  if (PA2 == m_parity){
+  if( PA2 == m_parity ){
     Serial.println("Minute parity check OK.");
     MparityCheckOk = true;
   }else {
@@ -418,7 +414,7 @@ void loop() {
       InternalClockCount();
       LCD_update();
     }
-  }while(p * m != 4);// マーカー(2)が２回続くまで繰り返す。
+  }while( p * m != 4 );// マーカー(2)が２回続くまで繰り返す。
 
 
   Serial.println("2-markers detected!!\n");
@@ -428,15 +424,15 @@ void loop() {
 
 
   do {//デコードを実行するループ
-      //ポジションマーカーをすべて正しく検出できている間は繰り返す。
-      //もし、一つでも検出できていなかったらループを止めてマーカ検出からやり直す。
+      //ポジションマーカーP1～P4のうち、2個以上を検出できている間はフレーム同期できているとみなしてループを繰り返す。
+      //検出できていなかったらループを止めてマーカ検出からやり直す。
 
     LCD_update();
     //デコード実行（60秒間のスキャンとデコード）
     decode();
 
-Serial.printf("Previous decode: %d/%02d/%02d %02d:%02d\n",YYp,MMp,DDp,hhp,mmp);
-Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d_hour,d_min);
+    Serial.printf("Previous decode: %d/%02d/%02d %02d:%02d\n",YYp,MMp,DDp,hhp,mmp);
+    Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d_hour,d_min);
 
     // Yearのデコード結果チェック
     if( d_year == YYp ){
@@ -487,7 +483,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
 
 
     //デコードチェックに応じてデコード結果を内部カウント時計に反映する
-    if (MparityCheckOk && P1markerOk){//分デコード結果を反映
+    if( MparityCheckOk && P1markerOk ){//分デコード結果を反映
       mm = d_min + 1;
       if( mm == 60 ){
         mm = 0;
@@ -532,7 +528,7 @@ Serial.printf("Current  decode: %d/%02d/%02d %02d:%02d\n",d_year,d_month,d_day,d
 
 
     
-  }while(markerCheckOk);
+  }while( markerCheckOk );
   LCD_update();
   delay(1);
 }
