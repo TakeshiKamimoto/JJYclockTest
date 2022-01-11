@@ -203,6 +203,7 @@ void decode() {
   if (get_code() == 2){
     Serial.println("Position Marker P1 detected.");
     P1markerOk = true;
+    markerOkCount++;
   }
   else {
     Serial.println("Failed to read Position Maker P1");
@@ -228,6 +229,7 @@ void decode() {
   if (get_code() == 2){
     Serial.println("Position Marker P2 detected.");
     P2markerOk = true;
+    markerOkCount++;
   }
   else {
     Serial.println("Failed to read Position Maker P2");
@@ -255,7 +257,6 @@ void decode() {
   }
   else {
     Serial.println("Failed to read Position Maker P3");
-    markerCheckOk = false;
   }
   // 通算日数（前半）のデコード おわり
 
@@ -281,7 +282,6 @@ void decode() {
   }
   else {
     Serial.println("Failed to read Position Maker P4");
-    markerCheckOk = false;
   }
   // 通算日数（後半）のデコード おわり
 
@@ -309,11 +309,9 @@ void decode() {
 
   if (get_code() == 2){
     Serial.println("Position Marker P5 detected.");
-    markerOkCount++;
   }
   else {
     Serial.println("Failed to read Position Maker P5");
-    markerCheckOk = false;
   }
    // 年のデコードおわり
 
@@ -331,17 +329,15 @@ void decode() {
   
   if (get_code() == 2){
     Serial.println("Position Marker P0 detected.");
-    markerOkCount++;
   }
   else {
     Serial.println("Failed to read Position Maker P0");
-    markerCheckOk = false;
   }
   // 曜日のデコードおわり
   
   Serial.println("End of time code decording sequence.");
 
-  markerCheckOk = (markerOkCount > 2)? true : false;//ポジションマーカー検出が3回以上できていればOKとする。
+  markerCheckOk = (markerOkCount > 1)? true : false;//ポジションマーカー検出が2回以上できていればOKとする。
 
   if (get_code() == 2){
     Serial.println("Marker M detected.");
