@@ -17,7 +17,7 @@ bool  firstLoop = true;
 char  buff[10];
 
 uint8_t markerOkCount;
-bool  P1markerOk, P2markerOk;
+bool  P1markerOk, P2markerOk, P5markerOk;
 
 void IRAM_ATTR jjysignaldetect() {// GPIO割り込みにより呼ばれるルーチン
   if (!flag) {
@@ -290,24 +290,35 @@ void decode() {
   d_day = dayCount;
 
 
-  // 年のデコードはじめ  ***********************
-  for (int8_t i = 0; i < 9; i++) {
-    n = get_code();
-    codeOk = (n == 0 || n == 1)? true : false;
-    bitcode[i] = n;
-  }
+  if( mm == 15 || mm == 45 ){//毎時15分と毎時45分ではサンプリングを休む
+    digitalWrite(LED,1);
+    for(int8_t i = 0; i < 9; i++) {
+      delay(1000);
+      ss++;
+    }
+    digitalWrite(LED,0);
+  } else {
+    // 年のデコードはじめ  ***********************
+    for (int8_t i = 0; i < 9; i++) {
+     n = get_code();
+     codeOk = (n == 0 || n == 1)? true : false;
+     bitcode[i] = n;
+    }
 
-  if( codeOk ) {
-    d_year  = bitcode[1]*80 + bitcode[2]*40 + bitcode[3]*20
-            + bitcode[4]*10 + bitcode[5]*8  + bitcode[6]*4
-            + bitcode[7]*2  + bitcode[8];
+   if( codeOk ) {
+     d_year  = bitcode[1]*80 + bitcode[2]*40 + bitcode[3]*20
+             + bitcode[4]*10 + bitcode[5]*8  + bitcode[6]*4
+             + bitcode[7]*2  + bitcode[8];
+    }
   }
-
+  
   if( get_code() == 2 ){
     Serial.println("Position Marker P5 detected.");
+    P5markerOk = true;
   }
   else {
     Serial.println("Failed to read Position Maker P5");
+    P5markerOk = false;
   }
    // 年のデコードおわり
 
@@ -506,7 +517,7 @@ void loop() {
       }
     }
 
-    if( YYdecodeOk ){//Yearデコード結果の反映。
+    if( YYdecodeOk && P5markerOk ){//Yearデコード結果の反映。
         YY = d_year;
     }
 
