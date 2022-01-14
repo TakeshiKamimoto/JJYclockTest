@@ -7,7 +7,7 @@
 
 volatile boolean flag = false;
 
-int8_t d_year, d_week, d_month, d_day, d_hour, d_min;
+uint8_t d_year, d_week, d_month, d_day, d_hour, d_min;
 const byte month_day[]={0,31,28,31,30,31,30,31,31,30,31,30,31};
 uint8_t hh, mm, MM, DD, YY;
 
@@ -413,7 +413,7 @@ void loop() {
   static int8_t MMdecodeOkCount = 0;
   static int8_t DDdecodeOkCount = 0;
   static int8_t hhdecodeOkCount = 0;
-  static int8_t YYp, MMp, DDp, hhp, mmp;
+  static uint8_t YYp, MMp, DDp, hhp, mmp;
   
   //2回連続マーカーの検出ループ
   do {
