@@ -1,9 +1,14 @@
+// JJY receiver pulse signal decorder
+//  programmed for ESP32    T.Kamimoto
+//  2022.Jan.
+//*******************************************
+
 #include <Wire.h>
 #include <stdio.h>
 
-#define PIN 14
+#define PIN 14  // JJY pulse input
 #define LED 25
-#define LCDaddr 0x3e    //  = 0x7C >> 1
+#define LCDaddr 0x3e    //I2C address of LCD module : 0x7C >> 1
 
 volatile boolean flag = false;
 
@@ -13,7 +18,6 @@ uint8_t hh, mm, MM, DD, YY;
 
 uint8_t ss;
 bool  markerCheckOk, MparityCheckOk, HparityCheckOk;
-bool  firstLoop = true;
 char  buff[10];
 
 uint8_t markerOkCount;
@@ -81,23 +85,7 @@ void LCD_print(char *str) {
 }
 
 
-void setup() {
-  pinMode(PIN, INPUT);
-  pinMode(LED, OUTPUT);
-  
-  Serial.begin(115200);
-  delay(200);
-
-  Wire.begin();
-  LCD_init();
-  LCD_cursor(0,0);
-  LCD_print("LCD init");
-
-  // JJYパルスをGPIO割り込みで検出するための設定
-  attachInterrupt(PIN, jjysignaldetect, RISING);
-}
-
-
+//パルス信号をスキャン+解析してパルスコードとして返すルーチン *****************************
 int8_t get_code(void) {
     
   int8_t scanbit;
@@ -106,6 +94,8 @@ int8_t get_code(void) {
 
       while (!flag) {//JJYパルス検出待ち
       }
+
+      update_LCDsec();
 
       // スキャン開始
       digitalWrite(LED,1);
@@ -165,14 +155,16 @@ int8_t get_code(void) {
       Serial.printf(" (%02d/%02d/%02d ", YY, MM, DD);
       Serial.printf("%02d:%02d:%02d)\n", hh, mm, ss);
 
-      LCD_cursor(6,1);
-      sprintf(buff, "%02d", ss);
-      LCD_print(buff);
-      
-      return(ret_code);
+  return(ret_code);
 }
 
+void update_LCDsec(){
+  LCD_cursor(6,1);
+  sprintf(buff, "%02d", ss);
+  LCD_print(buff);
+}
 
+//デコードのためのルーチン **********************************************
 void decode() {
   uint16_t longDayCount, dayCount;
   int8_t  bitcount = 0;
@@ -379,6 +371,7 @@ void decode() {
 
 }
 
+//LCD表示のアップデート **********************************************
 void LCD_update() {
     // LCDに年/月/日と時:分の表示
     LCD_cursor(0,0);
@@ -390,6 +383,7 @@ void LCD_update() {
     LCD_print(buff);
 }
 
+//内部カウント時計のインクリメント処理 **************************************
 void InternalClockCount(){
       mm++;
       if( mm == 60 ){
@@ -413,6 +407,36 @@ void InternalClockCount(){
       }
 }
 
+
+//*********************************************
+// 初期設定
+//*********************************************
+void setup() {
+  pinMode(PIN, INPUT);
+  pinMode(LED, OUTPUT);
+  
+  Serial.begin(115200);
+  delay(200);
+
+  Wire.begin();
+  LCD_init();
+  LCD_cursor(0,0);
+  LCD_print("LCD init");
+
+  // JJYパルスをGPIO割り込みで検出するための設定
+  attachInterrupt(PIN, jjysignaldetect, RISING);
+}
+
+
+
+//************************************************************
+// メインループ 
+// [1] タイムコードフレーム同期(2回連続マーカーの検出ループ）
+// [2] 1秒毎にパルスコードを読み込んで、デコードし、
+//     59秒分のデコード結果が正しそうか判定を行い、
+//     判定がOKであればデコード結果を内部カウント時計に反映する。
+//     もし、フレーム同期が外れていればこのループを抜けて1.から繰り返す。
+//************************************************************
 void loop() {
   int8_t m, p;
   int8_t sec, min = -1, hur;
@@ -424,7 +448,7 @@ void loop() {
   static int8_t mmdecodeOkCount = 0;  
   static uint8_t YYp, MMp, DDp, hhp, mmp;
   
-  //2回連続マーカーの検出ループ
+  //[1]2回連続マーカーの検出ループ***********************************
   do {
     Serial.println("Looking for Marker");
     p = m;
@@ -438,12 +462,11 @@ void loop() {
 
 
   Serial.println("2-markers detected!!\n");
-  ss = 0;
+  ss = 1;
   InternalClockCount();
 
-
-
-  do {//デコードを実行するループ
+  //[2]デコードを実行するループ ***********************************************
+  do {
       //ポジションマーカーP1～P4のうち、2個以上を検出できている間はフレーム同期できているとみなしてループを繰り返す。
       //検出できていなかったらループを止めてマーカ検出からやり直す。
 
@@ -491,7 +514,7 @@ void loop() {
         mmdecodeOkCount = (mmdecodeOkCount > 0)? mmdecodeOkCount - 1 : 0;
     }
     
-
+    //2回以上連続で比較が一致すればOKとする
     YYdecodeOk = (YYdecodeOkCount > 1)? true : false;
     MMdecodeOk = (MMdecodeOkCount > 1)? true : false;
     DDdecodeOk = (DDdecodeOkCount > 1)? true : false;
@@ -508,7 +531,7 @@ void loop() {
     mmp = d_min;
 
 
-    //とりあえず内部カウント時計をインクリメント
+    //とりあえず内部カウント時計をインクリメント(デコード結果がOKであれば次の処置で上書き更新される）
     InternalClockCount();
 
 
@@ -540,7 +563,7 @@ void loop() {
         YY = d_year;
     }
 
-    if( MMdecodeOk ){//Monthデコード結果の反映。月をまたぐときは反映すべきでないが
+    if( MMdecodeOk ){//Monthデコード結果の反映。月をまたぐときは反映すべきでないが。
         MM = d_month;
     }
 
@@ -558,7 +581,7 @@ void loop() {
 
 
     
-  }while( markerCheckOk );
+  }while( markerCheckOk );//マーカー位置が確認できている間は次の1分間のデコードを繰り返す。
   LCD_update();
   delay(1);
 }
